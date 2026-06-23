@@ -3,7 +3,11 @@
 # READ-WRITE / DESTRUCTIVE: rewrites history. Always backs up first; force-push left MANUAL.
 #
 # Usage:   ./purge-history.sh [repo_path]        (defaults to current dir)
-# Tool order: git-filter-repo  >  BFG (java)  >  git filter-branch (built-in fallback)
+# Tool order: git-filter-repo (preferred)  >  git filter-branch (built-in fallback)
+# BFG is intentionally NOT used: its --delete-files matches by basename only, so
+# .gemini/settings.json + .claude/settings.json collapse to "settings.json" and it
+# would delete EVERY settings.json / setup.js in history (incl. legitimate ones).
+# Both tools below are path-scoped and safe.
 #
 # NOTE: only purges files that are *standalone* worm artifacts. It does NOT purge package.json
 #       or Gemfile (legit files with injected content -> fix their content instead, don't drop them).
@@ -28,15 +32,19 @@ backup="../${name}-backup.bundle"
 git bundle create "$backup" --all
 echo "    backup -> $backup   (restore: git clone \"$backup\" restored)"
 
+# git-filter-repo removes the 'origin' remote by design; remember it so we can
+# restore it afterwards (otherwise the force-push step below would fail).
+origin_url="$(git remote get-url origin 2>/dev/null || true)"
+
 echo ">>> 1/4 Rewriting history to drop: ${PATHS[*]}"
 if command -v git-filter-repo >/dev/null 2>&1; then
   echo "    using git-filter-repo"
   args=(); for p in "${PATHS[@]}"; do args+=(--path "$p"); done
   git filter-repo --force --invert-paths "${args[@]}"
-elif command -v bfg >/dev/null 2>&1; then
-  echo "    using BFG"
-  for p in "${PATHS[@]}"; do bfg --delete-files "$(basename "$p")" --no-blob-protection . || true; done
-  git reflog expire --expire=now --all; git gc --prune=now --aggressive
+  if [ -n "$origin_url" ] && ! git remote get-url origin >/dev/null 2>&1; then
+    git remote add origin "$origin_url"
+    echo "    re-added origin -> $origin_url"
+  fi
 else
   echo "    using git filter-branch (fallback)"
   export FILTER_BRANCH_SQUELCH_WARNING=1
