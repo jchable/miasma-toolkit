@@ -239,18 +239,21 @@ Crypto (cas analysé) : clé AES `23c16bddf72d898b9ffb51aaac4391e7`, IV `a82be86
 
 Outils fournis (voir §9 pour leur état et les évolutions prévues) :
 
-1. **`Scan-Miasma.ps1`** — scanner **unifié** (`-Mode Local|Remote|All`), READ-ONLY, sortie
-   JSON + rapport Markdown, exit code 1 si INFECTED (CI-friendly). Les indicateurs sont centralisés
-   dans **`iocs.psd1`**.
+1. **[`Scan-Miasma.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Scan-Miasma.ps1)** —
+   scanner **unifié** (`-Mode Local|Remote|All`), READ-ONLY, sortie JSON + rapport Markdown,
+   exit code 1 si INFECTED (CI-friendly). Les indicateurs sont centralisés dans
+   **[`iocs.psd1`](https://github.com/jchable/miasma-toolkit/blob/main/iocs.psd1)**.
    - **Local** : fichiers injectés, payload (hash + structure `eval(`), artefacts Bun en temp,
      historique git (payload + commit forgé), persistance (tâches/Run), runners self-hosted,
      dépendances npm compromises, **CVE-2026-35603** (`C:\ProgramData\…`).
    - **Remote** (GitHub, comptes + orgs) : par dépôt et par branche (`main`/`master`/`dev`) →
      dropper, configs injectées, `package.json`/deps compromises, commits `[skip ci]` forgés,
      **workflows injectés**, **runners self-hosted**, secrets Actions, `npm audit` lockfile-only (sûr).
-2. **`purge-history.sh`** — **purge de l'historique git** (`git filter-repo` → `git filter-branch`)
-   des fichiers autonomes du ver : backup bundle automatique, nettoyage des refs + GC, force-push
-   laissé manuel.
+2. **[`purge-history.sh`](https://github.com/jchable/miasma-toolkit/blob/main/purge-history.sh)** —
+   **purge de l'historique git** (`git filter-repo` → `git filter-branch`) des fichiers autonomes
+   du ver : backup bundle automatique, nettoyage des refs + GC, force-push laissé manuel.
+   Règles **[`setup-js.yar`](https://github.com/jchable/miasma-toolkit/blob/main/setup-js.yar)**
+   (YARA) pour le dropper et les launchers.
 
 Vérif rapide « avant d'ouvrir un dépôt douteux » :
 ```bash
@@ -311,13 +314,14 @@ grep -rn "node .github/setup.js" .claude .gemini .cursor .vscode package.json Ge
 
 ## 9. Scripts à partager et à retravailler
 
-> Localisation actuelle : `e:\tmp\`. À déplacer dans un repo dédié (ex. `security-tooling/`).
+> Dépôt : <https://github.com/jchable/miasma-toolkit> (tous les scripts y sont publiés).
 
 | Script | Rôle | État | À retravailler |
 |---|---|---|---|
-| `Scan-Miasma.ps1` | Scan **unifié** local + GitHub distant (repos/branches/deps/Actions/CVE) ; JSON + Markdown ; exit code CI | fonctionnel | port **bash** (Linux/macOS) ; gestion du rate-limit GitHub ; déobfuscateur statique du payload |
-| `iocs.psd1` | **Indicateurs partagés** (hashes, signatures, packages, configs) | fonctionnel | enrichir au fil des variantes |
-| `purge-history.sh` | **Purge historique git** (filter-repo → filter-branch) ; backup auto ; garde-fou avant force-push | fonctionnel | — |
+| [`Scan-Miasma.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Scan-Miasma.ps1) | Scan **unifié** local + GitHub distant (repos/branches/deps/Actions/CVE) ; JSON + Markdown ; exit code CI | fonctionnel | port **bash** (Linux/macOS) ; gestion du rate-limit GitHub ; déobfuscateur statique du payload |
+| [`iocs.psd1`](https://github.com/jchable/miasma-toolkit/blob/main/iocs.psd1) | **Indicateurs partagés** (hashes, signatures, packages, configs) | fonctionnel | enrichir au fil des variantes |
+| [`purge-history.sh`](https://github.com/jchable/miasma-toolkit/blob/main/purge-history.sh) | **Purge historique git** (filter-repo → filter-branch) ; backup auto ; garde-fou avant force-push | fonctionnel | — |
+| [`setup-js.yar`](https://github.com/jchable/miasma-toolkit/blob/main/setup-js.yar) | **Règles YARA** (dropper + launchers) | fonctionnel | marqueurs internes après déobfuscation |
 
 **Bugs/leçons déjà corrigés (à garder en tête) :**
 - `gh api <404> --jq` **déverse le corps d'erreur sur stdout** → ne jamais se fier à la *truthiness*

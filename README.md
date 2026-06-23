@@ -7,7 +7,7 @@ variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitH
 
 | File | What it is |
 |---|---|
-| `incident-report.fr.md` / `incident-report.en.md` | Full write-up: how it works, payload deobfuscation, IOCs, eradication |
+| `content/incident-report.fr.md` / `content/incident-report.en.md` | Full write-up: how it works, payload deobfuscation, IOCs, eradication |
 | **`Scan-Miasma.ps1`** | **Unified scanner** (local + remote), structured JSON + Markdown report — *use this* |
 | `iocs.psd1` | Shared indicators (hashes, signatures, bad packages, configs) loaded by the scanner — *edit IOCs here* |
 | `purge-history.sh` | Purge malicious files from **all git history** (filter-repo → filter-branch) + backup |

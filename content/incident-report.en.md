@@ -231,13 +231,17 @@ Crypto (analyzed case): AES key `23c16bddf72d898b9ffb51aaac4391e7`, IV `a82be861
 
 ## 6. Detection — provided scripts
 
-See the toolkit `README.md`. In short:
-- **`Scan-Miasma.ps1`** — unified scanner (`-Mode Local|Remote|All`): local machine + repos
-  (incl. CVE-2026-35603 ProgramData) and/or remote GitHub repos (branches, deps, Actions).
-  Structured JSON + Markdown report output.
-- **`purge-history.sh`** — purges the malicious paths from **all git history**
-  (filter-repo → filter-branch), with auto-backup and a force-push guard.
-- **`setup-js.yar`** — YARA rule matching the `.github/setup.js` structure.
+See the toolkit [`README.md`](https://github.com/jchable/miasma-toolkit). In short:
+- **[`Scan-Miasma.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Scan-Miasma.ps1)** —
+  unified scanner (`-Mode Local|Remote|All`): local machine + repos (incl. CVE-2026-35603
+  ProgramData) and/or remote GitHub repos (branches, deps, Actions). Structured JSON + Markdown
+  report output. Indicators are centralized in
+  **[`iocs.psd1`](https://github.com/jchable/miasma-toolkit/blob/main/iocs.psd1)**.
+- **[`purge-history.sh`](https://github.com/jchable/miasma-toolkit/blob/main/purge-history.sh)** —
+  purges the malicious paths from **all git history** (filter-repo → filter-branch), with
+  auto-backup and a force-push guard.
+- **[`setup-js.yar`](https://github.com/jchable/miasma-toolkit/blob/main/setup-js.yar)** — YARA rule
+  matching the `.github/setup.js` structure.
 
 Quick "before opening an untrusted repo" check:
 ```bash
