@@ -4,8 +4,8 @@
   READ-ONLY: detects only, never deletes/modifies.
 
 .DESCRIPTION
-  Merges the former check-miasma.ps1 (local) and check-miasma-remote.ps1 (remote) into one
-  parameterizable tool with structured (JSON) and Markdown report output.
+  Unifies local-machine and remote-GitHub scanning into one parameterizable tool with
+  structured (JSON) and Markdown report output. IOCs live in the shared iocs.psd1.
 
 .PARAMETER Mode        Local | Remote | All   (default: All)
 .PARAMETER CodeRoots   Local roots to scan (default: user profile).
@@ -39,29 +39,50 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'; $ProgressPreference = 'SilentlyContinue'
 
 # ============================ IOCs ============================
-$PayloadShas = @(
-  '7711CC635948D9C8F661FB91D5E226642F695AF3B82F44343F6821D8FE504668',
-  'D630397DE8B01AF0F6F5CF4463DA91B17F28195A2C50C8F3F38AD9F7873FDB8E',
-  '3A9DB5BA0C8CD4C91E91717DF6B1A141FC1E0FBC0558B5A78D7F5C23F5B2A150',
-  '633C8410EE0413CA4B090A19C30B20C03F31598C25247C484846FA34C1DF5B64',
-  'EF641E956F91D501B748085996303C96A64D67F63BFEEF0DDA175E5AA19CCA90'
-)
-$BadEmails   = @('github-actions@github.com','41898282+github-actions@users.noreply.github.com')
-$ContentSigs = @('.github/setup.js','getBunPath','oven-sh/bun','detectHardenRunner','.sshu-setup','createCommitOnBranch','Runner.Worker','169.254.169.254','typeof Bun')
-$BadNpm      = @('@vapi-ai/server-sdk','ai-sdk-ollama','autotel','awaitly','executable-stories','node-env-resolver','wrangler-deploy')
-$ConfigFiles = @('.claude/settings.json','.gemini/settings.json','.cursor/rules/setup.mdc','.vscode/tasks.json','Gemfile')
-$WfSig       = 'setup\.js|oven-sh|bun\.sh/install|node \.github|curl -fsSL https://bun|getBunPath'
-$ProgramData = @(
-  'C:\ProgramData\ClaudeCode\managed-settings.json',
-  'C:\ProgramData\Cursor\hooks.json',
-  'C:\ProgramData\openai\codex\config.toml',
-  'C:\ProgramData\gemini-cli\system-defaults.json'
-)
+# Loaded from the shared iocs.psd1 (single source of truth). Inline values below
+# are a fallback so the scanner stays self-contained if the data file is missing.
+$IocDefaults = @{
+  PayloadShas = @(
+    '7711CC635948D9C8F661FB91D5E226642F695AF3B82F44343F6821D8FE504668',
+    'D630397DE8B01AF0F6F5CF4463DA91B17F28195A2C50C8F3F38AD9F7873FDB8E',
+    '3A9DB5BA0C8CD4C91E91717DF6B1A141FC1E0FBC0558B5A78D7F5C23F5B2A150',
+    '633C8410EE0413CA4B090A19C30B20C03F31598C25247C484846FA34C1DF5B64',
+    'EF641E956F91D501B748085996303C96A64D67F63BFEEF0DDA175E5AA19CCA90'
+  )
+  BadEmails   = @('github-actions@github.com','41898282+github-actions@users.noreply.github.com')
+  ContentSigs = @('.github/setup.js','getBunPath','oven-sh/bun','detectHardenRunner','.sshu-setup','createCommitOnBranch','Runner.Worker','169.254.169.254','typeof Bun')
+  BadNpm      = @('@vapi-ai/server-sdk','ai-sdk-ollama','autotel','awaitly','executable-stories','node-env-resolver','wrangler-deploy')
+  ConfigFiles = @('.claude/settings.json','.gemini/settings.json','.cursor/rules/setup.mdc','.vscode/tasks.json','Gemfile')
+  WfSig       = 'setup\.js|oven-sh|bun\.sh/install|node \.github|curl -fsSL https://bun|getBunPath'
+  ProgramDataContentSig = 'setup\.js|\bbun\b|\.sshu|\\\.?b[-_]|\\Temp\\|fromCharCode|eval\('
+  ProgramData = @(
+    'C:\ProgramData\ClaudeCode\managed-settings.json',
+    'C:\ProgramData\Cursor\hooks.json',
+    'C:\ProgramData\openai\codex\config.toml',
+    'C:\ProgramData\gemini-cli\system-defaults.json'
+  )
+}
+$IocPath = Join-Path $PSScriptRoot 'iocs.psd1'
+$IOC = $IocDefaults
+if(Test-Path $IocPath){
+  try { $loaded = Import-PowerShellDataFile -LiteralPath $IocPath
+        foreach($k in $IocDefaults.Keys){ if(-not $loaded.ContainsKey($k)){ $loaded[$k] = $IocDefaults[$k] } }
+        $IOC = $loaded }
+  catch { Write-Host "WARN: failed to load $IocPath ($($_.Exception.Message)); using built-in IOCs." -ForegroundColor Yellow }
+}
+$PayloadShas           = $IOC.PayloadShas
+$BadEmails             = $IOC.BadEmails
+$ContentSigs           = $IOC.ContentSigs
+$BadNpm                = $IOC.BadNpm
+$ConfigFiles           = $IOC.ConfigFiles
+$WfSig                 = $IOC.WfSig
+$ProgramDataContentSig = $IOC.ProgramDataContentSig
+$ProgramData           = $IOC.ProgramData
 
 # ======================== Findings store ========================
 $Findings = New-Object System.Collections.Generic.List[object]
 function Add-Finding([string]$scope,[string]$target,[string]$cat,[string]$detail){
-  $sev = if($cat -match 'DROPPER|INJECT|FORGED|BADDEP|WORKFLOW|RUNNER|PAYLOAD|HOOK|PROGRAMDATA'){'INFECTED'}else{'REVIEW'}
+  $sev = if($cat -match '^(DROPPER|INJECT|FORGED|BADDEP|WORKFLOW|RUNNER|PAYLOAD|BUN-DROP|PROGRAMDATA)$'){'INFECTED'}else{'REVIEW'}
   $Findings.Add([pscustomobject]@{ Scope=$scope; Target=$target; Category=$cat; Severity=$sev; Detail=$detail })
   $col = switch($sev){ 'INFECTED' {'Red'} default {'Yellow'} }
   Write-Host ("  [{0,-8}] {1,-13} {2} :: {3}" -f $sev,$cat,$target,$detail) -ForegroundColor $col
@@ -84,28 +105,44 @@ function Invoke-LocalScan {
 
   Sec "CVE-2026-35603 (C:\ProgramData configs)"
   foreach($p in $ProgramData){ if(Test-Path $p){
-    if(Select-String -LiteralPath $p -SimpleMatch 'command','hook','node ','bun ','setup.js','powershell','cmd /c','.exe' -Quiet){ Add-Finding 'Local' $p 'PROGRAMDATA' 'config contains commands -> inspect' }
+    # Writable-by-standard-users dir is the real CVE-2026-35603 signal -> INFECTED.
     $acl = (Get-Acl (Split-Path $p)).Access | Where-Object { $_.IdentityReference -match 'Users|Everyone|Authenticated' -and $_.FileSystemRights -match 'Write|Modify|FullControl' }
     if($acl){ Add-Finding 'Local' (Split-Path $p) 'PROGRAMDATA' 'dir writable by standard users (CVE-2026-35603)' }
+    # Content matching a worm IOC -> INFECTED; a generic command/hook only -> REVIEW (avoid FP).
+    if(Select-String -LiteralPath $p -Pattern $ProgramDataContentSig -Quiet){ Add-Finding 'Local' $p 'PROGRAMDATA' 'config references a worm IOC -> inspect' }
+    elseif(Select-String -LiteralPath $p -Pattern '"(command|hook|hooks)"|(^|\s)(node|bun|powershell|pwsh|cmd|sh|bash)\s|cmd\s*/c' -Quiet){ Add-Finding 'Local' $p 'PROGRAMDATA-CFG' 'config defines commands -> inspect manually' }
   }}
 
-  Sec "Injected config files referencing setup.js"
-  foreach($r in $roots){ Get-ChildItem $r -Recurse -File -Include 'settings.json','tasks.json','*.mdc','package.json','Gemfile' -EA SilentlyContinue |
-    Where-Object { $_.Length -lt 2MB -and $_.FullName -notmatch '\\node_modules\\|\\\.git\\' } |
-    ForEach-Object { if(Select-String -LiteralPath $_.FullName -SimpleMatch 'setup.js' -Quiet){ Add-Finding 'Local' $_.FullName 'INJECT' 'references setup.js' } } }
+  Sec "File scan (injected configs / payload / signatures / runners / bad deps)"
+  # Single recursive pass per root; each file is dispatched to every applicable rule
+  # (replaces the former 5 separate -Recurse walks). Filters per rule are preserved.
+  foreach($r in $roots){ Get-ChildItem $r -Recurse -File -EA SilentlyContinue | ForEach-Object {
+    $full = $_.FullName
+    if($full -match '\\node_modules\\'){ return }   # excluded by every file rule
+    $nm = $_.Name; $len = $_.Length; $ext = $_.Extension.ToLowerInvariant()
+    $inGit = $full -match '\\\.git\\'
 
-  Sec "Payload (setup.js / .js 4-7 MB)"
-  foreach($r in $roots){ Get-ChildItem $r -Recurse -File -Include '*.js' -EA SilentlyContinue |
-    Where-Object { $_.FullName -notmatch '\\node_modules\\' -and ($_.Name -eq 'setup.js' -or ($_.Length -ge 4MB -and $_.Length -le 7MB)) } |
-    ForEach-Object {
-      $h = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-      if($PayloadShas -contains $h){ Add-Finding 'Local' $_.FullName 'PAYLOAD' "hash match $h" }
-      else { $f = Get-Content -LiteralPath $_.FullName -TotalCount 1; if($f -and $f.TrimStart().StartsWith('eval(')){ Add-Finding 'Local' $_.FullName 'PAYLOAD' "single-line eval() $($_.Length)o" } } } }
+    # RUNNER: self-hosted GitHub Actions runner marker.
+    if($nm -eq '.runner'){ Add-Finding 'Local' $_.DirectoryName 'RUNNER' 'self-hosted runner'; return }
 
-  Sec "Worm content signatures"
-  foreach($r in $roots){ Get-ChildItem $r -Recurse -File -Include '*.js','*.mjs','*.cjs','*.ts','*.json' -EA SilentlyContinue |
-    Where-Object { $_.Length -lt 8MB -and $_.FullName -notmatch '\\node_modules\\|\\\.git\\' } |
-    ForEach-Object { $p=$_.FullName; foreach($s in $ContentSigs){ if(Select-String -LiteralPath $p -SimpleMatch $s -Quiet){ Add-Finding 'Local' $p 'SIGNATURE' $s; break } } } }
+    # INJECT: AI/IDE config or manifest referencing setup.js.
+    if(-not $inGit -and $len -lt 2MB -and ($nm -in 'settings.json','tasks.json','package.json','Gemfile' -or $ext -eq '.mdc')){
+      if(Select-String -LiteralPath $full -SimpleMatch 'setup.js' -Quiet){ Add-Finding 'Local' $full 'INJECT' 'references setup.js' } }
+
+    # BADDEP: npm manifest referencing a compromised package.
+    if($len -lt 5MB -and ($nm -eq 'package.json' -or $nm -eq 'package-lock.json')){
+      foreach($pk in $BadNpm){ if(Select-String -LiteralPath $full -SimpleMatch $pk -Quiet){ Add-Finding 'Local' $full 'BADDEP' $pk; break } } }
+
+    # PAYLOAD: setup.js or any 4-7 MB .js (known hash / single-line eval).
+    if($ext -eq '.js' -and ($nm -eq 'setup.js' -or ($len -ge 4MB -and $len -le 7MB))){
+      $h = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash
+      if($PayloadShas -contains $h){ Add-Finding 'Local' $full 'PAYLOAD' "hash match $h" }
+      else { $f0 = Get-Content -LiteralPath $full -TotalCount 1; if($f0 -and $f0.TrimStart().StartsWith('eval(')){ Add-Finding 'Local' $full 'PAYLOAD' "single-line eval() $($len)o" } } }
+
+    # SIGNATURE: worm content markers in code/json.
+    if(-not $inGit -and $len -lt 8MB -and ($ext -in '.js','.mjs','.cjs','.ts','.json')){
+      foreach($s in $ContentSigs){ if(Select-String -LiteralPath $full -SimpleMatch $s -Quiet){ Add-Finding 'Local' $full 'SIGNATURE' $s; break } } }
+  } }
 
   Sec "Bun temp artifacts + process"
   foreach($t in $temps){
@@ -119,16 +156,19 @@ function Invoke-LocalScan {
   foreach($r in $roots){ Get-ChildItem $r -Recurse -Directory -Filter '.git' -EA SilentlyContinue |
     Where-Object { $_.FullName -notmatch '\\node_modules\\' } |
     ForEach-Object { $repo = Split-Path $_.FullName -Parent
-      if(git -C $repo log --all --oneline -- .github/setup.js .cursor/rules/setup.mdc .gemini/settings.json 2>$null){ Add-Finding 'Local' $repo 'FORGED' 'malware in git history' }
+      # Malware file still reachable in any commit -> PAYLOAD.
+      if(git -C $repo log --all --oneline -- .github/setup.js .cursor/rules/setup.mdc .gemini/settings.json 2>$null){ Add-Finding 'Local' $repo 'PAYLOAD' 'malware in git history' }
+      # Forged commit: unsigned (%G? = N) AND [skip ci] AND (impersonated bot email OR worm message).
+      $forged = git -C $repo log --all --pretty='%G?|%ce|%s' 2>$null | Where-Object {
+        $x = $_ -split '\|',3
+        ($x[0] -eq 'N') -and ($x[2] -match 'skip ci') -and ( ($BadEmails -contains $x[1]) -or ($x[2] -match 'update dependencies') )
+      }
+      if($forged){ Add-Finding 'Local' $repo 'FORGED' "$(@($forged).Count) unsigned [skip ci] commit(s)" }
     } }
 
-  Sec "Persistence + self-hosted runners + bad npm deps"
+  Sec "Persistence (scheduled tasks / Run keys)"
   Get-ScheduledTask -EA SilentlyContinue | Where-Object { (($_.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join ' ') -match 'bun|setup\.js|\\\.?b[-_]|Local\\Temp' } | ForEach-Object { Add-Finding 'Local' $_.TaskName 'PERSIST' 'scheduled task' }
   'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run','HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' | ForEach-Object { $k = Get-ItemProperty $_ -EA SilentlyContinue; if($k){ $k.PSObject.Properties | Where-Object { $_.Value -is [string] -and $_.Value -match 'bun|setup\.js|\\\.?b[-_]' } | ForEach-Object { Add-Finding 'Local' $_.Name 'PERSIST' "Run key: $($_.Value)" } } }
-  foreach($r in $roots){ Get-ChildItem $r -Recurse -File -Filter '.runner' -EA SilentlyContinue | ForEach-Object { Add-Finding 'Local' $_.DirectoryName 'RUNNER' 'self-hosted runner' } }
-  foreach($r in $roots){ Get-ChildItem $r -Recurse -File -Include 'package.json','package-lock.json' -EA SilentlyContinue |
-    Where-Object { $_.Length -lt 5MB -and $_.FullName -notmatch '\\node_modules\\' } |
-    ForEach-Object { $p=$_.FullName; foreach($pk in $BadNpm){ if(Select-String -LiteralPath $p -SimpleMatch $pk -Quiet){ Add-Finding 'Local' $p 'BADDEP' $pk; break } } } }
 }
 
 # ============================================================
@@ -163,14 +203,20 @@ function Invoke-RemoteScan {
       $pkg = GhRaw $name 'package.json' $b
       if($pkg){ if($pkg -match 'setup\.js'){ Add-Finding 'Remote' $name 'INJECT' "[$b] package.json script" }
         foreach($pk in $BadNpm){ if($pkg -match [regex]::Escape($pk)){ Add-Finding 'Remote' $name 'BADDEP' "[$b] $pk" } } }
-      $bad = (GhJson "repos/$name/commits?per_page=50&sha=$b") | Where-Object { $_.commit.message -match 'skip ci' -and $_.commit.verification.verified -eq $false }
-      if($bad){ Add-Finding 'Remote' $name 'FORGED' "[$b] $($bad.Count) unsigned [skip ci] commit(s), ex $($bad[0].sha.Substring(0,7))" }
+      # Forged commit: unsigned + [skip ci] AND (impersonated bot email OR worm message).
+      # The extra email/message condition avoids flagging legitimate unsigned [skip ci] commits.
+      $bad = @((GhJson "repos/$name/commits?per_page=50&sha=$b") | Where-Object {
+        $_.commit.verification.verified -eq $false -and $_.commit.message -match 'skip ci' -and (
+          ($BadEmails -contains $_.commit.author.email) -or ($BadEmails -contains $_.commit.committer.email) -or
+          ($_.commit.message -match 'update dependencies') ) })
+      if($bad.Count){ Add-Finding 'Remote' $name 'FORGED' "[$b] $($bad.Count) forged [skip ci] commit(s), ex $($bad[0].sha.Substring(0,7))" }
       foreach($w in (GhJson "repos/$name/contents/.github/workflows?ref=$b")){ if($w.name -match '\.ya?ml$'){ $wc = GhRaw $name ".github/workflows/$($w.name)" $b; if($wc -and ($wc -match $WfSig)){ Add-Finding 'Remote' $name 'WORKFLOW' "[$b] $($w.name)" } } }
       if($audit -and $pkg){ $lock = GhRaw $name 'package-lock.json' $b
         if($lock){ $key = "$($lock.Length):$($lock.Substring(0,[Math]::Min(64,$lock.Length)))"
           if(-not $cache.ContainsKey($key)){
             $tmp = Join-Path $env:TEMP ("npmaudit-"+[guid]::NewGuid().ToString('N')); New-Item -ItemType Directory $tmp | Out-Null
-            $pkg | Set-Content "$tmp\package.json"; $lock | Set-Content "$tmp\package-lock.json"
+            # WriteAllText -> UTF-8 without BOM, portable across PowerShell 5.1 and 7 (npm-safe JSON).
+            [System.IO.File]::WriteAllText("$tmp\package.json", $pkg); [System.IO.File]::WriteAllText("$tmp\package-lock.json", $lock)
             Push-Location $tmp; $au = (npm audit --package-lock-only --json 2>$null | Out-String); Pop-Location; Remove-Item $tmp -Recurse -Force
             $res=$null; try{ $v=($au|ConvertFrom-Json).metadata.vulnerabilities; if($v -and (($v.critical+$v.high) -gt 0)){ $res="$($v.critical) crit / $($v.high) high" } }catch{}
             $cache[$key]=$res }
