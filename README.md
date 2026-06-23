@@ -9,16 +9,33 @@ variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitH
 |---|---|
 | `incident-report.fr.md` / `incident-report.en.md` | Full write-up: how it works, payload deobfuscation, IOCs, eradication |
 | **`Scan-Miasma.ps1`** | **Unified scanner** (local + remote), structured JSON + Markdown report — *use this* |
-| `purge-history.sh` | Purge malicious files from **all git history** (filter-repo/BFG/filter-branch) + backup |
+| `iocs.psd1` | Shared indicators (hashes, signatures, bad packages, configs) loaded by the scanner — *edit IOCs here* |
+| `purge-history.sh` | Purge malicious files from **all git history** (filter-repo → filter-branch) + backup |
 | `setup-js.yar` | YARA rules for the dropper + launcher configs |
-| `check-miasma.ps1`, `check-miasma-remote.ps1` | **Originals** (superseded by `Scan-Miasma.ps1`, kept for reference) |
-| `purge-malware-history.sh` | Original purge (case-specific; superseded by `purge-history.sh`) |
+
+## Prerequisites
+
+| Tool | Needed for | Required? |
+|---|---|---|
+| **PowerShell 7+** (`pwsh`) | `Scan-Miasma.ps1` | required |
+| **git** | local-repo history checks, `purge-history.sh` | required |
+| **GitHub CLI** (`gh`, authenticated) | `Scan-Miasma.ps1 -Mode Remote` | remote scan only |
+| **npm** | remote `npm audit` (lockfile-only) | optional (auto-skipped if absent) |
+| **git-filter-repo** | preferred history rewrite (falls back to built-in `git filter-branch`) | optional |
+| **YARA** (`yara`) | `setup-js.yar` scan | optional |
+
+Install YARA (Windows): `winget install VirusTotal.YARA` — or `choco install yara` / `scoop install yara`.
+On Linux/macOS: `apt install yara` / `brew install yara`. Verify with `yara --version`.
 
 ## Quick usage
+
+> Note: `-Mode Local` defaults to scanning `$env:USERPROFILE` only. Pass `-CodeRoots` to cover
+> repos elsewhere, e.g. `-CodeRoots E:\Sources,D:\work`.
 
 ```powershell
 # Scan local machine + local repos (+ CVE-2026-35603 ProgramData)
 pwsh -File Scan-Miasma.ps1 -Mode Local
+pwsh -File Scan-Miasma.ps1 -Mode Local -CodeRoots E:\Sources,D:\work
 
 # Scan remote GitHub repos (authenticate on the target account first for private repos/secrets)
 gh auth login
@@ -55,8 +72,8 @@ yara -r setup-js.yar /path/to/scan
 
 ## Severity model (Scan-Miasma.ps1)
 
-- **INFECTED** — `DROPPER`, `INJECT`, `FORGED`, `BADDEP`, `WORKFLOW`, `RUNNER`, `PAYLOAD`, `HOOK`, `PROGRAMDATA`
-- **REVIEW** — `NPM-AUDIT`, `SECRETS` (rotation inventory), `SIGNATURE`, `PERSIST`
+- **INFECTED** — `DROPPER`, `INJECT`, `FORGED`, `BADDEP`, `WORKFLOW`, `RUNNER`, `PAYLOAD`, `BUN-DROP`, `PROGRAMDATA`
+- **REVIEW** — `NPM-AUDIT`, `SECRETS` (rotation inventory), `SIGNATURE`, `PERSIST`, `PROGRAMDATA-CFG`
 
 ## Known bugs already fixed (keep in mind when reworking)
 

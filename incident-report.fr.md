@@ -237,17 +237,20 @@ Crypto (cas analysé) : clé AES `23c16bddf72d898b9ffb51aaac4391e7`, IV `a82be86
 
 ## 6. Détection — scripts fournis
 
-Trois scripts (voir §9 pour leur état et les évolutions prévues) :
+Outils fournis (voir §9 pour leur état et les évolutions prévues) :
 
-1. **`check-miasma.ps1`** — scanner **local** (machine + dépôts locaux) :
-   fichiers injectés, payload (hash + structure `eval(`), artefacts Bun en temp, historique git,
-   persistance (tâches/Run/Démarrage), runners self-hosted, **CVE-2026-35603** (`C:\ProgramData\…`).
-2. **`check-miasma-remote.ps1`** — scanner **GitHub distant** (comptes + orgs) :
-   par dépôt et par branche (`main`/`master`/`dev`) → dropper, configs injectées,
-   `package.json`/deps compromises, commits `[skip ci]` non vérifiés, **workflows injectés**,
-   **runners self-hosted**, secrets Actions, `npm audit` lockfile-only (sûr).
-3. **`purge-malware-history.sh`** — **purge de l'historique git** (`git filter-branch`) des 5 fichiers,
-   nettoyage des refs + GC, force-push laissé manuel.
+1. **`Scan-Miasma.ps1`** — scanner **unifié** (`-Mode Local|Remote|All`), READ-ONLY, sortie
+   JSON + rapport Markdown, exit code 1 si INFECTED (CI-friendly). Les indicateurs sont centralisés
+   dans **`iocs.psd1`**.
+   - **Local** : fichiers injectés, payload (hash + structure `eval(`), artefacts Bun en temp,
+     historique git (payload + commit forgé), persistance (tâches/Run), runners self-hosted,
+     dépendances npm compromises, **CVE-2026-35603** (`C:\ProgramData\…`).
+   - **Remote** (GitHub, comptes + orgs) : par dépôt et par branche (`main`/`master`/`dev`) →
+     dropper, configs injectées, `package.json`/deps compromises, commits `[skip ci]` forgés,
+     **workflows injectés**, **runners self-hosted**, secrets Actions, `npm audit` lockfile-only (sûr).
+2. **`purge-history.sh`** — **purge de l'historique git** (`git filter-repo` → `git filter-branch`)
+   des fichiers autonomes du ver : backup bundle automatique, nettoyage des refs + GC, force-push
+   laissé manuel.
 
 Vérif rapide « avant d'ouvrir un dépôt douteux » :
 ```bash
@@ -269,8 +272,7 @@ grep -rn "node .github/setup.js" .claude .gemini .cursor .vscode package.json Ge
 3. **Supprimer le payload** : `.github/setup.js` (et committer la suppression des 6 vecteurs).
 4. **Purger l'historique git** (le fichier reste sinon récupérable par SHA) :
    ```bash
-   git bundle create backup.bundle --all        # sauvegarde d'abord
-   bash purge-malware-history.sh                 # filter-branch + GC
+   ./purge-history.sh /chemin/vers/depot          # backup bundle + filter-repo/filter-branch + GC
    git push origin --force --all && git push origin --force --tags
    ```
    > Note : GitHub peut conserver d'anciens commits accessibles par SHA / via la PR ; passer le
@@ -285,7 +287,7 @@ grep -rn "node .github/setup.js" .claude .gemini .cursor .vscode package.json Ge
 8. **Audit du compte GitHub** : *Security log* (retrouver le push du commit forgé → token/IP coupable),
    révoquer PAT / OAuth apps / GitHub Apps / deploy keys, purger les **secrets Actions** (repo + org),
    supprimer toute clé SSH/GPG inconnue.
-9. **Scanner TOUS les dépôts** (locaux **et** distants, le ver se propage) avec les scripts du §6,
+9. **Scanner TOUS les dépôts** (locaux **et** distants, le ver se propage) avec `Scan-Miasma.ps1` (§6),
    et nettoyer chaque dépôt infecté de la même façon.
 10. **Scan antivirus complet** de la machine (relever le nom de détection).
 
@@ -313,9 +315,9 @@ grep -rn "node .github/setup.js" .claude .gemini .cursor .vscode package.json Ge
 
 | Script | Rôle | État | À retravailler |
 |---|---|---|---|
-| `check-miasma.ps1` | Scan **local** (machine + repos + CVE-2026-35603) | fonctionnel | version **bash** équivalente ; sortie JSON/CSV ; durcir les ACL ProgramData |
-| `check-miasma-remote.ps1` | Scan **GitHub distant** (repos/branches/deps/Actions) | **v2 (bug DROPPER corrigé)** | multi-comptes/token, option « toutes branches », gestion du rate-limit, export rapport |
-| `purge-malware-history.sh` | **Purge historique git** (filter-branch) | fonctionnel | support `git filter-repo`/BFG si dispo ; backup auto ; garde-fou avant force-push |
+| `Scan-Miasma.ps1` | Scan **unifié** local + GitHub distant (repos/branches/deps/Actions/CVE) ; JSON + Markdown ; exit code CI | fonctionnel | port **bash** (Linux/macOS) ; gestion du rate-limit GitHub ; déobfuscateur statique du payload |
+| `iocs.psd1` | **Indicateurs partagés** (hashes, signatures, packages, configs) | fonctionnel | enrichir au fil des variantes |
+| `purge-history.sh` | **Purge historique git** (filter-repo → filter-branch) ; backup auto ; garde-fou avant force-push | fonctionnel | — |
 
 **Bugs/leçons déjà corrigés (à garder en tête) :**
 - `gh api <404> --jq` **déverse le corps d'erreur sur stdout** → ne jamais se fier à la *truthiness*

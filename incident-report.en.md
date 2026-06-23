@@ -235,8 +235,8 @@ See the toolkit `README.md`. In short:
 - **`Scan-Miasma.ps1`** — unified scanner (`-Mode Local|Remote|All`): local machine + repos
   (incl. CVE-2026-35603 ProgramData) and/or remote GitHub repos (branches, deps, Actions).
   Structured JSON + Markdown report output.
-- **`purge-history.sh`** — purges the malicious paths from **all git history** (filter-repo/BFG/
-  filter-branch), with auto-backup and a force-push guard.
+- **`purge-history.sh`** — purges the malicious paths from **all git history**
+  (filter-repo → filter-branch), with auto-backup and a force-push guard.
 - **`setup-js.yar`** — YARA rule matching the `.github/setup.js` structure.
 
 Quick "before opening an untrusted repo" check:
@@ -259,8 +259,7 @@ grep -rn "node .github/setup.js" .claude .gemini .cursor .vscode package.json Ge
 3. **Delete the payload**: `.github/setup.js` (commit the removal of all 6 vectors).
 4. **Purge git history** (the file is otherwise recoverable by SHA):
    ```bash
-   git bundle create backup.bundle --all     # back up first
-   ./purge-history.sh                          # filter-repo / BFG / filter-branch + GC
+   ./purge-history.sh /path/to/repo            # auto-backup + filter-repo / filter-branch + GC
    git push origin --force --all && git push origin --force --tags
    ```
    > Note: GitHub may keep old commits reachable by SHA / via the PR; make the repo **private** and
