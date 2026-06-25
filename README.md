@@ -16,10 +16,12 @@ variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitH
 | File | What it is |
 |---|---|
 | `content/incident-report.fr.md` / `content/incident-report.en.md` | Full write-up: how it works, payload deobfuscation, IOCs, eradication |
-| **`Scan-Miasma.ps1`** | **Unified scanner** (local + remote), structured JSON + Markdown report — *use this* |
+| **`Scan-Miasma.ps1`** | **Unified scanner** (local + remote), structured JSON + per-repo Markdown report — *use this* |
 | `iocs.psd1` | Shared indicators (hashes, signatures, bad packages, configs) loaded by the scanner — *edit IOCs here* |
+| `Expand-MiasmaPayload.ps1` | **Static deobfuscator** for `setup.js` — peels char codes → Caesar → AES-128-GCM and extracts the C2/IOCs (never executes the payload) |
 | `purge-history.sh` | Purge malicious files from **all git history** (filter-repo → filter-branch) + backup |
 | `setup-js.yar` | YARA rules for the dropper + launcher configs |
+| `.github/actions/miasma-guard/` | Reusable **GitHub Actions composite action** — refuses to build if the dropper/launcher is present |
 | `.claude/` | **Claude Code hooks** — real-time guard/quarantine + `/miasma-scan` command (see below) |
 
 ## Prerequisites
@@ -67,17 +69,30 @@ git push origin --force --all && git push origin --force --tags
 yara -r setup-js.yar /path/to/scan
 ```
 
-## CI guard (drop into a GitHub Actions workflow, first step)
+```powershell
+# Statically deobfuscate a captured dropper (read-only — never runs it)
+pwsh -File Expand-MiasmaPayload.ps1 -Path .github/setup.js   # writes layers + iocs.txt to <Path>.deob/
+pwsh -File Expand-MiasmaPayload.ps1 -SelfTest                # verify the decode/decrypt engine
+```
+The deobfuscator decodes the char-code wave, auto-detects and reverses the Caesar shift
+(override with `-Shift`), then decrypts every embedded AES-128-GCM blob (`_b` bootstrapper,
+`_p` stealer) and scans the recovered code for URLs, IPs, and dead-drop accounts.
+
+## CI guard (refuse to build if the dropper/launcher is present)
+
+Use the bundled composite action as the **first step** of any workflow:
 
 ```yaml
-- name: Block Miasma/Shai-Hulud dropper
-  shell: bash
-  run: |
-    if [ -f .github/setup.js ] || \
-       grep -rqsI "node .github/setup.js" .claude .gemini .cursor .vscode package.json Gemfile 2>/dev/null; then
-      echo "::error::Miasma/Shai-Hulud dropper or launcher detected — failing build"; exit 1
-    fi
+# In another repo (pin to a tag/SHA for supply-chain safety):
+- uses: actions/checkout@v4
+- uses: jchable/miasma-toolkit/.github/actions/miasma-guard@main
+  # with:
+  #   full-scan: 'true'   # also run Scan-Miasma.ps1 -Mode Local (needs pwsh)
 ```
+
+This toolkit runs the same guard on itself via [`.github/workflows/miasma-ci.yml`](.github/workflows/miasma-ci.yml)
+(referencing the action by relative path). The guard is wave-agnostic and scoped to the worm's
+launcher config files, so it never false-positives on docs that merely mention the IOC string.
 
 ## Claude Code hooks (`.claude/`)
 
@@ -96,8 +111,9 @@ Real-time protection for machines that run **Claude Code** in this repo. The hoo
   (git-ignored) and logged to `.miasma-quarantine/quarantine.log` — restore with `Move-Item`.
   Nothing is hard-deleted.
 - **Self-exclusion** (`Test-MiasmaExcluded` in `Miasma.Common.ps1`): the toolkit's own files
-  legitimately contain IOC strings (`iocs.psd1`, `Scan-Miasma.ps1`, `purge-history.sh`,
-  `setup-js.yar`, `content/`, `.claude/hooks|commands`) and are never blocked/quarantined.
+  legitimately contain IOC strings (`iocs.psd1`, `Scan-Miasma.ps1`, `Expand-MiasmaPayload.ps1`,
+  `purge-history.sh`, `setup-js.yar`, `content/`, `.claude/hooks|commands`,
+  `.github/actions/miasma-guard/`, `.github/workflows/`) and are never blocked/quarantined.
 - **`Guard-Bash` targets execution, not mention**: its patterns (`iocs.psd1` → `CmdSigs`) are
   anchored to a command position, so triage commands that merely name an IOC
   (`grep "node .github/setup.js"`, `yara -r setup-js.yar`, `cat setup.js`) are **not** blocked —
@@ -122,10 +138,9 @@ Real-time protection for machines that run **Claude Code** in this repo. The hoo
 ## TODO / rework backlog
 
 1. Bash port of the local scan (Linux/macOS dev machines).
-2. Static deobfuscator (char codes → Caesar → AES-GCM) to extract the `_p` stealer's C2.
-3. Richer report (per-repo Markdown, severity badges).
-4. Package the CI guard as a reusable composite action.
-5. Auto-rotation helpers (gh/aws/npm token revoke checklist).
+2. Severity badges in the Markdown report (per-repo grouping landed).
+3. Caesar self-decoder packer wave support in the deobfuscator (char-code wave landed).
+4. Auto-rotation helpers (gh/aws/npm token revoke checklist).
 
 ## References
 

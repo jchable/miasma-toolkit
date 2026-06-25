@@ -1,0 +1,33 @@
+name: 'Miasma Guard'
+description: >-
+  Refuse to build if the Miasma / Shai-Hulud dropper (.github/setup.js) or an
+  auto-run launcher referencing it is present in the repository. Wave-agnostic,
+  read-only, fast. Optionally runs the full Scan-Miasma.ps1 local scan.
+inputs:
+  path:
+    description: 'Directory to check (default: repository root).'
+    required: false
+    default: '.'
+  full-scan:
+    description: >-
+      Also run Scan-Miasma.ps1 -Mode Local (requires pwsh; the scanner ships in
+      this action's repository). Fails the build on any INFECTED finding.
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Miasma dropper / launcher guard
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/guard.sh" "${{ inputs.path }}"
+    - name: Full local scan (optional)
+      if: ${{ inputs.full-scan == 'true' }}
+      shell: pwsh
+      run: |
+        $scanner = Join-Path $env:GITHUB_ACTION_PATH '../../../Scan-Miasma.ps1'
+        if (Test-Path $scanner) {
+          pwsh -NoProfile -File $scanner -Mode Local -CodeRoots "${{ inputs.path }}"
+          exit $LASTEXITCODE
+        } else {
+          Write-Host "::notice::Scan-Miasma.ps1 not found next to the action; skipping full scan."
+        }

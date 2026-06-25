@@ -35,6 +35,16 @@ yara -r setup-js.yar /path/to/scan      # YARA scan for the dropper/launcher
 ```
 
 ```powershell
+# Static deobfuscator (READ-ONLY — never executes the payload)
+pwsh -File Expand-MiasmaPayload.ps1 -Path .github/setup.js   # -> <Path>.deob/ (layers + iocs.txt)
+pwsh -File Expand-MiasmaPayload.ps1 -SelfTest                # round-trip the decode/decrypt engine
+```
+
+CI guard: composite action `.github/actions/miasma-guard/` (bash `guard.sh`) fails the build if
+`.github/setup.js` (or a launcher running it) is present; `.github/workflows/miasma-ci.yml` runs it
+on this repo by relative path.
+
+```powershell
 # Claude Code hooks run automatically (PreToolUse/PostToolUse/SessionStart). Run a hook by hand:
 '{"tool_input":{"file_path":"x.js","content":"getBunPath"}}' | pwsh -File .claude/hooks/Guard-Write.ps1
 pwsh -File .claude/hooks/Session-Sweep.ps1     # repo sweep; /miasma-scan wraps Scan-Miasma.ps1
@@ -45,7 +55,24 @@ pwsh -File .claude/hooks/Session-Sweep.ps1     # repo sweep; /miasma-scan wraps 
 - **`Scan-Miasma.ps1`** is the one tool to run. Single file, two scan functions
   (`Invoke-LocalScan`, `Invoke-RemoteScan`) selected by `-Mode Local|Remote|All`. All hits flow
   through `Add-Finding`, which assigns severity by category regex and appends to one `$Findings`
-  list; the tail emits the table, optional JSON/Markdown, and the exit code.
+  list; the tail emits the table, optional JSON, and the exit code. The **Markdown report is
+  grouped per "unit"**: each Remote finding's `Target` is its repo (`owner/repo` / `org:foo`), all
+  Local findings share one `Local machine` unit; the report leads with a per-unit summary table
+  (units with INFECTED findings first) then one section per unit.
+- **`Expand-MiasmaPayload.ps1`** is the static deobfuscator (read-only; never `eval`/`node`/`bun`).
+  Pipeline: `ConvertFrom-CharCodes` (longest comma-separated integer run → chars) → `Get-CaesarShift`
+  (auto-detect by scoring JS keywords; override with `-Shift`) + `Invoke-CaesarShift` → `Expand-AesGcm`
+  (regex out every `key(32hex),iv(24hex),tag(32hex),ciphertext` tuple, decrypt with .NET `AesGcm`) →
+  `Find-PayloadIocs` (reuses `iocs.psd1` `ContentSigs` + URL/IP/dead-drop regexes). It writes every
+  layer to `-OutDir` so a failed later layer still yields artifacts; `-SelfTest` round-trips a
+  synthetic 3-layer sample to prove the engine. Fully handles the char-code wave; the Caesar
+  self-decoder packer wave is detected but only partially handled.
+- **`.github/actions/miasma-guard/`** is a composite GitHub Action (`action.yml` + `guard.sh`):
+  refuse-to-build if `.github/setup.js` exists or a launcher *config* (`.claude/settings.json`,
+  `.vscode/tasks.json`, `package.json`, …) runs `node .github/setup.js`. Wave-agnostic and scoped to
+  launcher configs by design, so docs/scripts that merely mention the IOC don't trip it. Optional
+  `full-scan: 'true'` input runs `Scan-Miasma.ps1 -Mode Local`. `.github/workflows/miasma-ci.yml`
+  invokes it by relative path; external repos reference `…/.github/actions/miasma-guard@<ref>`.
 - **`iocs.psd1` is the single source of truth for indicators** — edit IOCs here, not in the script.
   It is loaded with `Import-PowerShellDataFile` (pure data, no code execution). The script keeps an
   inline `$IocDefaults` copy as a fallback if the file is missing, and merges any keys absent from
@@ -87,10 +114,13 @@ pwsh -File .claude/hooks/Session-Sweep.ps1     # repo sweep; /miasma-scan wraps 
   commits): it also needs an impersonated github-actions bot email OR a worm message like
   `update dependencies`. Keep `BadEmails` to bot addresses only — never a real owner's email.
 - **The hooks must exclude the toolkit's own files** (`Test-MiasmaExcluded`): `iocs.psd1`,
-  `Scan-Miasma.ps1`, `purge-history.sh`, `setup-js.yar`, `content/`, `.claude/hooks|commands` all
-  contain IOC strings on purpose — without the allowlist the hooks quarantine/block themselves.
-  Toolkit dirs are anchored to the repo root (`StartsWith`); only `.git`/`node_modules`/the vault
-  match at any depth — so a *user* sub-folder named `content/` is still scanned.
+  `Scan-Miasma.ps1`, `Expand-MiasmaPayload.ps1`, `purge-history.sh`, `setup-js.yar`, `content/`,
+  `.claude/hooks|commands`, `.github/actions/miasma-guard/`, `.github/workflows/` all contain IOC
+  strings on purpose — without the allowlist the hooks quarantine/block themselves. Toolkit dirs are
+  anchored to the repo root (`StartsWith`); only `.git`/`node_modules`/the vault match at any depth —
+  so a *user* sub-folder named `content/` is still scanned. **Trade-off:** because `.github/workflows/`
+  is now repo-root-excluded, a real worm dropped into *this* repo's own `.github/setup.js` is caught
+  by the CI guard, not the Write/Bash hooks.
 
 ## Conventions
 

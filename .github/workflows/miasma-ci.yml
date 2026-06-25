@@ -1,0 +1,22 @@
+name: Miasma Guard
+
+# Refuses to build when the Miasma / Shai-Hulud dropper or an auto-run launcher
+# is present. Runs on every push and pull request.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Miasma guard
+        uses: ./.github/actions/miasma-guard
+        # Set full-scan: 'true' in YOUR repo to also run Scan-Miasma.ps1 -Mode Local.
+        # Left off here: this is the toolkit itself, whose own files contain IOC
+        # strings on purpose (the dropper/launcher guard above is enough here).

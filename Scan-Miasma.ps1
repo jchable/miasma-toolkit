@@ -254,12 +254,39 @@ else { Write-Host "No Miasma / Shai-Hulud indicators found." -ForegroundColor Gr
 
 if($OutJson){ $Findings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $OutJson -Encoding utf8; Write-Host "JSON -> $OutJson" -ForegroundColor Cyan }
 if($OutReport){
+  # Group each finding under a "unit": a Remote finding's Target IS the repo
+  # (owner/repo or org:foo); Local findings share one "Local machine" unit
+  # (their Targets are heterogeneous paths/PIDs/task names, not repos).
+  function ReportUnit($f){ if($f.Scope -eq 'Remote'){ return $f.Target } return 'Local machine' }
+  function SevBadge($s){ if($s -eq 'INFECTED'){ '🔴 INFECTED' } else { '🟡 REVIEW' } }
+  # A unit's badge is its worst severity (any INFECTED -> red, else yellow).
+  function UnitBadge($g){ if(@($g.Group | Where-Object Severity -eq 'INFECTED').Count){ '🔴' } else { '🟡' } }
   $md = New-Object System.Collections.Generic.List[string]
   $md.Add("# Miasma / Shai-Hulud scan report")
-  $md.Add(""); $md.Add("- Mode: ``$Mode``"); $md.Add("- Findings: **$($Findings.Count)** (INFECTED: **$($infected.Count)**, REVIEW: $($review.Count))")
-  $md.Add(""); $md.Add("| Severity | Scope | Category | Target | Detail |"); $md.Add("|---|---|---|---|---|")
-  foreach($f in ($Findings | Sort-Object Severity,Scope,Target)){ $md.Add("| $($f.Severity) | $($f.Scope) | $($f.Category) | $($f.Target) | $($f.Detail) |") }
-  if(-not $Findings.Count){ $md.Add("`n_No indicators found._") }
+  $verdict = if($infected.Count){ '🔴 INFECTED' } elseif($review.Count){ '🟡 REVIEW' } else { '🟢 CLEAN' }
+  $md.Add(""); $md.Add("**Verdict: $verdict**")
+  $md.Add(""); $md.Add("- Mode: ``$Mode``"); $md.Add("- Findings: **$($Findings.Count)** (🔴 INFECTED: **$($infected.Count)**, 🟡 REVIEW: $($review.Count))")
+  if(-not $Findings.Count){
+    $md.Add(""); $md.Add("_No indicators found._")
+  } else {
+    # Per-unit summary (units with INFECTED findings first), then a section per unit.
+    $groups  = $Findings | Group-Object { ReportUnit $_ }
+    $ordered = $groups | Sort-Object @{e={ @($_.Group | Where-Object Severity -eq 'INFECTED').Count }; Descending=$true}, Name
+    $md.Add(""); $md.Add("## Summary by unit"); $md.Add("")
+    $md.Add("| | Unit | 🔴 INFECTED | 🟡 REVIEW |"); $md.Add("|---|---|---|---|")
+    foreach($g in $ordered){
+      $gi = @($g.Group | Where-Object Severity -eq 'INFECTED').Count
+      $gr = @($g.Group | Where-Object Severity -eq 'REVIEW').Count
+      $md.Add("| $(UnitBadge $g) | $($g.Name) | $gi | $gr |")
+    }
+    foreach($g in $ordered){
+      $md.Add(""); $md.Add("## $(UnitBadge $g) $($g.Name)"); $md.Add("")
+      $md.Add("| Severity | Category | Target | Detail |"); $md.Add("|---|---|---|---|")
+      foreach($f in ($g.Group | Sort-Object Severity,Category,Target)){
+        $md.Add("| $(SevBadge $f.Severity) | $($f.Category) | $($f.Target) | $($f.Detail) |")
+      }
+    }
+  }
   $md -join "`n" | Set-Content -LiteralPath $OutReport -Encoding utf8; Write-Host "Markdown -> $OutReport" -ForegroundColor Cyan
 }
 exit ([int]($infected.Count -gt 0))

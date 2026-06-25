@@ -33,11 +33,6 @@ le fait que ces outils **exécutent automatiquement** des hooks/tâches définis
 - Comptes d'exfiltration (« dead-drop ») : `windy629`, `liuende501`, `HerGomUli` — dépôts
   décrits *« Miasma - The Spreading Blight »* / *« Hades - The End for the Damned »*.
 
-> ⚠️ À distinguer de **CVE-2026-35603** (Cymulate) : une **élévation de privilèges locale** via des
-> dossiers de config *world-writable* dans `C:\ProgramData\` (Claude Code corrigé en v2.0.76 ;
-> Cursor/Codex/Gemini non corrigés). Même thème (abus de config d'agents IA) mais **problème distinct**
-> du ver Miasma. À vérifier en parallèle.
-
 ---
 
 ## 2. Chaîne d'infection — comment ça entre et s'exécute
@@ -254,6 +249,16 @@ Outils fournis (voir §9 pour leur état et les évolutions prévues) :
    du ver : backup bundle automatique, nettoyage des refs + GC, force-push laissé manuel.
    Règles **[`setup-js.yar`](https://github.com/jchable/miasma-toolkit/blob/main/setup-js.yar)**
    (YARA) pour le dropper et les launchers.
+3. **[`Expand-MiasmaPayload.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Expand-MiasmaPayload.ps1)** —
+   **déobfuscateur statique** du dropper, READ-ONLY (n'exécute jamais le payload) : décode la vague
+   *char codes* → détecte/inverse le décalage César → déchiffre chaque blob **AES-128-GCM**
+   (`_b` bootstrapper, `_p` infostealer) → extrait URLs / IP / comptes « dead-drop ». Écrit chaque
+   couche dans `<Path>.deob/` ; `-SelfTest` valide le moteur sur un échantillon 3 couches synthétique.
+4. **Intégration CI** — action composite réutilisable
+   **[`.github/actions/miasma-guard`](https://github.com/jchable/miasma-toolkit/tree/main/.github/actions/miasma-guard)**
+   (« refuse to build if `.github/setup.js` present ») : échoue le build si le dropper ou un lanceur
+   l'exécutant est présent. Agnostique aux vagues, cadrée sur les fichiers de config lanceurs (pas de
+   faux positif sur la doc). Option `full-scan` pour lancer en plus `Scan-Miasma.ps1 -Mode Local`.
 
 Vérif rapide « avant d'ouvrir un dépôt douteux » :
 ```bash
@@ -318,24 +323,13 @@ grep -rn "node .github/setup.js" .claude .gemini .cursor .vscode package.json Ge
 
 | Script | Rôle | État | À retravailler |
 |---|---|---|---|
-| [`Scan-Miasma.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Scan-Miasma.ps1) | Scan **unifié** local + GitHub distant (repos/branches/deps/Actions/CVE) ; JSON + Markdown ; exit code CI | fonctionnel | port **bash** (Linux/macOS) ; gestion du rate-limit GitHub ; déobfuscateur statique du payload |
+| [`Scan-Miasma.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Scan-Miasma.ps1) | Scan **unifié** local + GitHub distant (repos/branches/deps/Actions/CVE) ; JSON + **Markdown par dépôt** ; exit code CI | fonctionnel | port **bash** (Linux/macOS) ; gestion du rate-limit GitHub ; badges de sévérité |
 | [`iocs.psd1`](https://github.com/jchable/miasma-toolkit/blob/main/iocs.psd1) | **Indicateurs partagés** (hashes, signatures, packages, configs) | fonctionnel | enrichir au fil des variantes |
+| [`Expand-MiasmaPayload.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Expand-MiasmaPayload.ps1) | **Déobfuscateur statique** : char codes → César → AES-128-GCM ; extrait `_b`/`_p` + C2 ; READ-ONLY ; `-SelfTest` | fonctionnel (vague char-codes) | vague *packer* à auto-déchiffrement César |
 | [`purge-history.sh`](https://github.com/jchable/miasma-toolkit/blob/main/purge-history.sh) | **Purge historique git** (filter-repo → filter-branch) ; backup auto ; garde-fou avant force-push | fonctionnel | — |
 | [`setup-js.yar`](https://github.com/jchable/miasma-toolkit/blob/main/setup-js.yar) | **Règles YARA** (dropper + launchers) | fonctionnel | marqueurs internes après déobfuscation |
+| [`.github/actions/miasma-guard`](https://github.com/jchable/miasma-toolkit/tree/main/.github/actions/miasma-guard) | **Action CI** GitHub réutilisable : refuse le build si dropper/lanceur présent ; option `full-scan` | fonctionnel | — |
 
-**Bugs/leçons déjà corrigés (à garder en tête) :**
-- `gh api <404> --jq` **déverse le corps d'erreur sur stdout** → ne jamais se fier à la *truthiness*
-  de la sortie : vérifier **`$LASTEXITCODE`** + valider le format (nombre, nom de branche).
-- GitHub garde un **redirect `master`→`main`** après renommage → `branches/master` répond 200 ;
-  n'accepter une branche que si **le nom renvoyé == le nom demandé**.
-- L'audit npm **doit rester `--package-lock-only`** (aucun `npm install`, aucun script exécuté).
-
-**Pistes d'évolution (prochaine session) :**
-1. Fusionner local+remote en un seul outil paramétrable (mode `--local` / `--remote`).
-2. Sortie structurée (JSON) + rapport Markdown auto-généré par dépôt.
-3. Règles YARA pour `setup.js` (structure : 1 ligne, `eval(`, `createDecipheriv`, `aes-128-gcm`, `getBunPath`).
-4. Désobfuscateur statique (char codes → César → AES-GCM) pour extraire la C2 du blob `_p`.
-5. Intégration CI (action « refuse to build if `.github/setup.js` present »).
 
 ---
 
