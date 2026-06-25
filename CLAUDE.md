@@ -21,7 +21,7 @@ pwsh -File Scan-Miasma.ps1 -Mode Local -CodeRoots E:\Sources,D:\work
 
 # Remote GitHub scan (gh must be authenticated; auth the TARGET account for private repos/secrets)
 gh auth login
-pwsh -File Scan-Miasma.ps1 -Mode Remote -Owners jchable,jchable-coderise -OutReport report.md
+pwsh -File Scan-Miasma.ps1 -Mode Remote -Owners your-org,your-user -OutReport report.md
 
 # Full run with both report formats
 pwsh -File Scan-Miasma.ps1 -OutJson findings.json -OutReport report.md

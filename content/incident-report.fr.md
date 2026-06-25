@@ -57,7 +57,7 @@ Le ver pousse un **commit déguisé** dans le dépôt. Sur le cas analysé :
 
 Signaux forensiques clés :
 - **Email différent de l'identité git habituelle** (ici les ~109 vrais commits utilisent
-  `julien.chable@ncit.nc`). Le ver utilise l'email **du profil GitHub**.
+  `owner@company.example`). Le ver utilise l'email **du profil GitHub**.
 - **`[skip ci]`** pour esquiver toute CI/scrutin.
 - **Horodatage recopié** du vrai merge pour se fondre dans l'historique.
 - **Non signé** (les vrais merges GitHub le sont).

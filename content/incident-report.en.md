@@ -60,7 +60,7 @@ The worm pushes a **disguised commit**. In the analyzed case:
 | Content | real code | **only the 5 malicious files** |
 
 Key forensic signals:
-- **Email differs from the usual git identity** (here ~109 real commits use `julien.chable@ncit.nc`).
+- **Email differs from the usual git identity** (here ~109 real commits use `owner@company.example`).
   The worm uses the **GitHub profile** email.
 - **`[skip ci]`** to dodge CI/scrutiny.
 - **Timestamp copied** from the real merge to blend in.
