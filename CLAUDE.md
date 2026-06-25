@@ -142,6 +142,9 @@ pwsh -File .claude/hooks/Session-Sweep.ps1     # repo sweep; /miasma-scan wraps 
   is now repo-root-excluded, a real worm dropped into *this* repo's own `.github/setup.js` is caught
   by the CI guard, not the Write/Bash hooks.
 
+## Dev workflow
+- If you commit, whatever you did a work for the commited files, you don't add yourself to the co-authoring in the commit message.
+
 ## Conventions
 
 - PowerShell 7+ (`pwsh`) required; `Scan-Miasma.ps1` and the YARA rules are **read-only** (detect,
