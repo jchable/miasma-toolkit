@@ -54,6 +54,14 @@ $IocDefaults = @{
   BadNpm      = @('@vapi-ai/server-sdk','ai-sdk-ollama','autotel','awaitly','executable-stories','node-env-resolver','wrangler-deploy')
   ConfigFiles = @('.claude/settings.json','.gemini/settings.json','.cursor/rules/setup.mdc','.vscode/tasks.json','Gemfile')
   WfSig       = 'setup\.js|oven-sh|bun\.sh/install|node \.github|curl -fsSL https://bun|getBunPath'
+  # CmdSigs is consumed by the .claude Bash guard hook, not by this scanner; kept
+  # here only so iocs.psd1 and $IocDefaults stay in sync (see CLAUDE.md).
+  CmdSigs     = @(
+    '(^|[;&|(]|&&|\|\|)\s*(node|nodejs)\b[^|;&]*\bsetup\.js\b',
+    '(^|[;&|(]|&&|\|\|)\s*bunx?\b',
+    '(^|[;&|(]|&&|\|\|)\s*(curl|wget)\b[^|;&]*\bbun(\.sh)?\b',
+    '\b(sh|bash|zsh|dash)\s+-c\s+[''"]?\s*(node|nodejs)\b[^''"]*\bsetup\.js\b'
+  )
   ProgramDataContentSig = 'setup\.js|\bbun\b|\.sshu|\\\.?b[-_]|\\Temp\\|fromCharCode|eval\('
   ProgramData = @(
     'C:\ProgramData\ClaudeCode\managed-settings.json',

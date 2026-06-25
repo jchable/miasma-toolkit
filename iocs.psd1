@@ -59,6 +59,19 @@
   # Regex matching an injected GitHub Actions workflow.
   WfSig = 'setup\.js|oven-sh|bun\.sh/install|node \.github|curl -fsSL https://bun|getBunPath'
 
+  # Command-EXECUTION signatures — consumed by the Claude Code Bash guard hook
+  # (.claude/hooks/Guard-Bash.ps1), NOT by Scan-Miasma.ps1. Each pattern is
+  # anchored to a command position (start, or after ; && || | ( ) so that merely
+  # MENTIONING the string (grep/yara/cat during triage) does not match — only
+  # actually RUNNING the worm does. The worm launches via `node .github/setup.js`,
+  # the `bun` runtime, or a piped `bun.sh` installer.
+  CmdSigs = @(
+    '(^|[;&|(]|&&|\|\|)\s*(node|nodejs)\b[^|;&]*\bsetup\.js\b',          # run the dropper
+    '(^|[;&|(]|&&|\|\|)\s*bunx?\b',                                      # invoke bun / bunx
+    '(^|[;&|(]|&&|\|\|)\s*(curl|wget)\b[^|;&]*\bbun(\.sh)?\b',           # fetch the bun installer
+    '\b(sh|bash|zsh|dash)\s+-c\s+[''"]?\s*(node|nodejs)\b[^''"]*\bsetup\.js\b'  # dropper via sh -c "..."
+  )
+
   # Regex of worm IOCs expected inside a C:\ProgramData AI-tool config
   # (strong signal -> INFECTED). Generic "has a command" content alone is REVIEW.
   ProgramDataContentSig = 'setup\.js|\bbun\b|\.sshu|\\\.?b[-_]|\\Temp\\|fromCharCode|eval\('

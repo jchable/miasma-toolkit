@@ -1,0 +1,3 @@
+# Reversible quarantine vault populated by the Claude Code Miasma hooks.
+# Contents are (potentially) malicious — never commit them.
+.miasma-quarantine/
