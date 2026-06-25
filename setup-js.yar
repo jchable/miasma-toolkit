@@ -17,13 +17,12 @@ rule Miasma_ShaiHulud_dropper_setupjs
         $eval        = "eval("
         $eval_fn     = "eval(function"               // Caesar self-decoder wave
         $caesar      = /replace\(\/\[[a-zA-Z]+\]\/[gi]+/  // Caesar alpha-shift marker (variant-tolerant)
-        $fcc         = "fromCharCode"
-        $charcodes   = /(\d{1,7}\s*,\s*){400}/        // long char-code array (our wave)
+        $fcc         = "fromCharCode"                 // char-code-array wave (always present per analysis)
 
     condition:
         filesize > 1MB and filesize < 12MB
         and $eval in (0..32)                          // single-line eval() dropper at file start
-        and ( $charcodes or $eval_fn or $caesar or $fcc )
+        and ( $eval_fn or $caesar or $fcc )
 }
 
 /* Companion: detect the auto-run launchers (small config files) by their command. */
