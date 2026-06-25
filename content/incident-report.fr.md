@@ -250,15 +250,21 @@ Outils fournis (voir §9 pour leur état et les évolutions prévues) :
    Règles **[`setup-js.yar`](https://github.com/jchable/miasma-toolkit/blob/main/setup-js.yar)**
    (YARA) pour le dropper et les launchers.
 3. **[`Expand-MiasmaPayload.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Expand-MiasmaPayload.ps1)** —
-   **déobfuscateur statique** du dropper, READ-ONLY (n'exécute jamais le payload) : décode la vague
-   *char codes* → détecte/inverse le décalage César → déchiffre chaque blob **AES-128-GCM**
-   (`_b` bootstrapper, `_p` infostealer) → extrait URLs / IP / comptes « dead-drop ». Écrit chaque
-   couche dans `<Path>.deob/` ; `-SelfTest` valide le moteur sur un échantillon 3 couches synthétique.
+   **déobfuscateur statique** du dropper, READ-ONLY (n'exécute jamais le payload) : dépacke la vague
+   *packer* `p,a,c,k,e,d` → décode la vague *char codes* → détecte/inverse le décalage César →
+   déchiffre chaque blob **AES-128-GCM** (`_b` bootstrapper, `_p` infostealer) → extrait URLs / IP /
+   comptes « dead-drop ». Écrit chaque couche dans `<Path>.deob/` ; `-SelfTest` valide le moteur.
 4. **Intégration CI** — action composite réutilisable
    **[`.github/actions/miasma-guard`](https://github.com/jchable/miasma-toolkit/tree/main/.github/actions/miasma-guard)**
    (« refuse to build if `.github/setup.js` present ») : échoue le build si le dropper ou un lanceur
    l'exécutant est présent. Agnostique aux vagues, cadrée sur les fichiers de config lanceurs (pas de
    faux positif sur la doc). Option `full-scan` pour lancer en plus `Scan-Miasma.ps1 -Mode Local`.
+5. **[`scan-miasma.sh`](https://github.com/jchable/miasma-toolkit/blob/main/scan-miasma.sh)** — portage
+   **bash** du scan local (Linux/macOS) : sous-ensemble multiplateforme (configs injectées, payload,
+   artefacts Bun, deps npm compromises, signatures, historique git, runners, persistance cron/systemd).
+6. **[`Invoke-MiasmaRotation.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Invoke-MiasmaRotation.ps1)** —
+   **checklist de rotation des secrets** post-éradication, READ-ONLY (ne révoque rien) : détecte les
+   identifiants accessibles depuis la machine et imprime les commandes de révocation priorisées.
 
 Vérif rapide « avant d'ouvrir un dépôt douteux » :
 ```bash
@@ -325,7 +331,9 @@ grep -rn "node .github/setup.js" .claude .gemini .cursor .vscode package.json Ge
 |---|---|---|---|
 | [`Scan-Miasma.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Scan-Miasma.ps1) | Scan **unifié** local + GitHub distant (repos/branches/deps/Actions/CVE) ; JSON + **Markdown par dépôt** ; exit code CI | fonctionnel | port **bash** (Linux/macOS) ; gestion du rate-limit GitHub ; badges de sévérité |
 | [`iocs.psd1`](https://github.com/jchable/miasma-toolkit/blob/main/iocs.psd1) | **Indicateurs partagés** (hashes, signatures, packages, configs) | fonctionnel | enrichir au fil des variantes |
-| [`Expand-MiasmaPayload.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Expand-MiasmaPayload.ps1) | **Déobfuscateur statique** : char codes → César → AES-128-GCM ; extrait `_b`/`_p` + C2 ; READ-ONLY ; `-SelfTest` | fonctionnel (vague char-codes) | vague *packer* à auto-déchiffrement César |
+| [`Expand-MiasmaPayload.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Expand-MiasmaPayload.ps1) | **Déobfuscateur statique** : packer `p,a,c,k,e,d` → char codes → César → AES-128-GCM ; extrait `_b`/`_p` + C2 ; READ-ONLY ; `-SelfTest` | fonctionnel | variantes César ROT-4/9 multi-octets |
+| [`Invoke-MiasmaRotation.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Invoke-MiasmaRotation.ps1) | **Checklist rotation des secrets** post-éradication ; détecte les identifiants présents ; READ-ONLY (ne révoque rien) | fonctionnel | mode `--revoke` opt-in (avec confirmation) |
+| [`scan-miasma.sh`](https://github.com/jchable/miasma-toolkit/blob/main/scan-miasma.sh) | **Portage bash** du scan local (Linux/macOS) | fonctionnel | mode distant GitHub |
 | [`purge-history.sh`](https://github.com/jchable/miasma-toolkit/blob/main/purge-history.sh) | **Purge historique git** (filter-repo → filter-branch) ; backup auto ; garde-fou avant force-push | fonctionnel | — |
 | [`setup-js.yar`](https://github.com/jchable/miasma-toolkit/blob/main/setup-js.yar) | **Règles YARA** (dropper + launchers) | fonctionnel | marqueurs internes après déobfuscation |
 | [`.github/actions/miasma-guard`](https://github.com/jchable/miasma-toolkit/tree/main/.github/actions/miasma-guard) | **Action CI** GitHub réutilisable : refuse le build si dropper/lanceur présent ; option `full-scan` | fonctionnel | — |

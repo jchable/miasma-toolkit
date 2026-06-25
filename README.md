@@ -22,7 +22,9 @@ variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitH
 | `content/incident-report.fr.md` / `content/incident-report.en.md` | Full write-up: how it works, payload deobfuscation, IOCs, eradication |
 | **`Scan-Miasma.ps1`** | **Unified scanner** (local + remote), structured JSON + per-repo Markdown report — *use this* |
 | `iocs.psd1` | Shared indicators (hashes, signatures, bad packages, configs) loaded by the scanner — *edit IOCs here* |
-| `Expand-MiasmaPayload.ps1` | **Static deobfuscator** for `setup.js` — peels char codes → Caesar → AES-128-GCM and extracts the C2/IOCs (never executes the payload) |
+| `Expand-MiasmaPayload.ps1` | **Static deobfuscator** for `setup.js` — peels packer/char-codes → Caesar → AES-128-GCM and extracts the C2/IOCs (never executes the payload) |
+| `Invoke-MiasmaRotation.ps1` | **Secret-rotation checklist** — detects which credentials are reachable here and prints the revoke commands (read-only; revokes nothing) |
+| `scan-miasma.sh` | **Bash port** of the local scan for Linux/macOS (cross-platform subset) |
 | `purge-history.sh` | Purge malicious files from **all git history** (filter-repo → filter-branch) + backup |
 | `setup-js.yar` | YARA rules for the dropper + launcher configs |
 | `.github/actions/miasma-guard/` | Reusable **GitHub Actions composite action** — refuses to build if the dropper/launcher is present |
@@ -32,7 +34,8 @@ variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitH
 
 | Tool | Needed for | Required? |
 |---|---|---|
-| **PowerShell 7+** (`pwsh`) | `Scan-Miasma.ps1` | required |
+| **PowerShell 7+** (`pwsh`) | `Scan-Miasma.ps1`, `Expand-MiasmaPayload.ps1`, `Invoke-MiasmaRotation.ps1` | required (those tools) |
+| **bash + coreutils** (`sha256sum`/`shasum`, `awk`, `find`) | `scan-miasma.sh` (Linux/macOS) | the bash port only |
 | **git** | local-repo history checks, `purge-history.sh` | required |
 | **GitHub CLI** (`gh`, authenticated) | `Scan-Miasma.ps1 -Mode Remote` | remote scan only |
 | **npm** | remote `npm audit` (lockfile-only) | optional (auto-skipped if absent) |
@@ -73,14 +76,27 @@ git push origin --force --all && git push origin --force --tags
 yara -r setup-js.yar /path/to/scan
 ```
 
+```bash
+# Linux/macOS: local scan (bash port — defaults to $HOME; pass roots to widen)
+./scan-miasma.sh
+./scan-miasma.sh ~/src /opt/work
+```
+
 ```powershell
 # Statically deobfuscate a captured dropper (read-only — never runs it)
 pwsh -File Expand-MiasmaPayload.ps1 -Path .github/setup.js   # writes layers + iocs.txt to <Path>.deob/
 pwsh -File Expand-MiasmaPayload.ps1 -SelfTest                # verify the decode/decrypt engine
 ```
-The deobfuscator decodes the char-code wave, auto-detects and reverses the Caesar shift
-(override with `-Shift`), then decrypts every embedded AES-128-GCM blob (`_b` bootstrapper,
-`_p` stealer) and scans the recovered code for URLs, IPs, and dead-drop accounts.
+The deobfuscator unpacks the `p,a,c,k,e,d` packer wave, decodes the char-code wave, auto-detects
+and reverses the Caesar shift (override with `-Shift`), then decrypts every embedded AES-128-GCM
+blob (`_b` bootstrapper, `_p` stealer) and scans the recovered code for URLs, IPs, and dead-drop
+accounts.
+
+```powershell
+# After eradication: generate a prioritized secret-rotation checklist (revokes nothing)
+pwsh -File Invoke-MiasmaRotation.ps1                       # detects creds reachable here
+pwsh -File Invoke-MiasmaRotation.ps1 -OutReport rotation.md
+```
 
 ## CI guard (refuse to build if the dropper/launcher is present)
 
@@ -115,9 +131,10 @@ Real-time protection for machines that run **Claude Code** in this repo. The hoo
   (git-ignored) and logged to `.miasma-quarantine/quarantine.log` — restore with `Move-Item`.
   Nothing is hard-deleted.
 - **Self-exclusion** (`Test-MiasmaExcluded` in `Miasma.Common.ps1`): the toolkit's own files
-  legitimately contain IOC strings (`iocs.psd1`, `Scan-Miasma.ps1`, `Expand-MiasmaPayload.ps1`,
-  `purge-history.sh`, `setup-js.yar`, `content/`, `.claude/hooks|commands`,
-  `.github/actions/miasma-guard/`, `.github/workflows/`) and are never blocked/quarantined.
+  legitimately contain IOC strings (`iocs.psd1`, `Scan-Miasma.ps1`, `scan-miasma.sh`,
+  `Expand-MiasmaPayload.ps1`, `Invoke-MiasmaRotation.ps1`, `purge-history.sh`, `setup-js.yar`,
+  `content/`, `.claude/hooks|commands`, `.github/actions/miasma-guard/`, `.github/workflows/`)
+  and are never blocked/quarantined.
 - **`Guard-Bash` targets execution, not mention**: its patterns (`iocs.psd1` → `CmdSigs`) are
   anchored to a command position, so triage commands that merely name an IOC
   (`grep "node .github/setup.js"`, `yara -r setup-js.yar`, `cat setup.js`) are **not** blocked —
@@ -141,10 +158,12 @@ Real-time protection for machines that run **Claude Code** in this repo. The hoo
 
 ## TODO / rework backlog
 
-1. Bash port of the local scan (Linux/macOS dev machines).
-2. Severity badges in the Markdown report (per-repo grouping landed).
-3. Caesar self-decoder packer wave support in the deobfuscator (char-code wave landed).
-4. Auto-rotation helpers (gh/aws/npm token revoke checklist).
+_The original backlog (bash port, severity badges, packer-wave deobfuscation, rotation helper) is
+done. Future ideas:_
+
+1. `scan-miasma.sh`: add the remote/GitHub mode (currently local-only).
+2. Deobfuscator: handle ROT-4/ROT-9 multi-byte and non-AES-128-GCM variants if observed.
+3. Rotation helper: optional `--revoke` mode (gated, with confirmation) for `gh`/`npm`/`aws`.
 
 ## References
 

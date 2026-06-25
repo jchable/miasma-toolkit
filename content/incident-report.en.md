@@ -238,10 +238,16 @@ See the toolkit [`README.md`](https://github.com/jchable/miasma-toolkit). In sho
   Markdown** report output. Indicators are centralized in
   **[`iocs.psd1`](https://github.com/jchable/miasma-toolkit/blob/main/iocs.psd1)**.
 - **[`Expand-MiasmaPayload.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Expand-MiasmaPayload.ps1)** —
-  **static deobfuscator**, READ-ONLY (never executes the payload): decodes the char-code wave →
-  auto-detects/reverses the Caesar shift → decrypts each **AES-128-GCM** blob (`_b` bootstrapper,
-  `_p` infostealer) → extracts URLs / IPs / dead-drop accounts. Writes each layer to `<Path>.deob/`;
-  `-SelfTest` round-trips the engine on a synthetic 3-layer sample.
+  **static deobfuscator**, READ-ONLY (never executes the payload): unpacks the `p,a,c,k,e,d` packer
+  wave → decodes the char-code wave → auto-detects/reverses the Caesar shift → decrypts each
+  **AES-128-GCM** blob (`_b` bootstrapper, `_p` infostealer) → extracts URLs / IPs / dead-drop
+  accounts. Writes each layer to `<Path>.deob/`; `-SelfTest` round-trips the engine.
+- **[`Invoke-MiasmaRotation.ps1`](https://github.com/jchable/miasma-toolkit/blob/main/Invoke-MiasmaRotation.ps1)** —
+  post-eradication **secret-rotation checklist**, READ-ONLY (revokes nothing): detects which
+  credentials are reachable from this machine and prints prioritized revoke/rotate commands.
+- **[`scan-miasma.sh`](https://github.com/jchable/miasma-toolkit/blob/main/scan-miasma.sh)** — **bash
+  port** of the local scan for Linux/macOS (cross-platform subset: injected configs, payload, Bun
+  artifacts, bad npm deps, signatures, git history, runners, cron/systemd persistence).
 - **[`purge-history.sh`](https://github.com/jchable/miasma-toolkit/blob/main/purge-history.sh)** —
   purges the malicious paths from **all git history** (filter-repo → filter-branch), with
   auto-backup and a force-push guard.
