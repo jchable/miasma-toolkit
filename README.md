@@ -3,6 +3,14 @@
 Incident analysis + detection/remediation tooling for the **Miasma** worm (a *Mini Shai-Hulud*
 variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitHub repos.
 
+> ⚠️ **Disclaimer — no warranty.** This is a community defensive toolkit provided **"as is"**,
+> without warranty of any kind (see [`LICENSE`](LICENSE)). The scanner and YARA rules are
+> read-only, but `purge-history.sh` **rewrites git history** and the `.claude/` hooks **move files
+> to quarantine** — both can alter a repository. **Back up first, review what each tool does, and
+> run it at your own risk.** A clean scan is not a guarantee of safety: indicators evolve and new
+> variants appear. Use on systems and accounts you are authorized to inspect. Found a gap or a bug?
+> See [`SECURITY.md`](SECURITY.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Contents
 
 | File | What it is |
