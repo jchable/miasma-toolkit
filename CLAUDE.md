@@ -8,6 +8,9 @@ Incident-response toolkit for the **Miasma** worm (a *Mini Shai-Hulud* variant) 
 auto-run payloads into AI-agent/IDE configs (`.claude`, `.gemini`, `.cursor`, `.vscode`) and into
 npm/GitHub repos, plus coverage for **CVE-2026-35603** (writable `C:\ProgramData` AI-tool configs).
 The toolkit is detection + remediation only; there is no application to build and no test suite.
+A `.claude/` directory adds **Claude Code hooks** for real-time guard/quarantine on machines that
+run Claude Code in this repo (these reuse `iocs.psd1` and are the only components that write/move
+files — everything else is read-only).
 
 ## Commands
 
@@ -31,6 +34,12 @@ Exit code is `1` when any **INFECTED** finding exists (CI-friendly), `0` otherwi
 yara -r setup-js.yar /path/to/scan      # YARA scan for the dropper/launcher
 ```
 
+```powershell
+# Claude Code hooks run automatically (PreToolUse/PostToolUse/SessionStart). Run a hook by hand:
+'{"tool_input":{"file_path":"x.js","content":"getBunPath"}}' | pwsh -File .claude/hooks/Guard-Write.ps1
+pwsh -File .claude/hooks/Session-Sweep.ps1     # repo sweep; /miasma-scan wraps Scan-Miasma.ps1
+```
+
 ## Architecture
 
 - **`Scan-Miasma.ps1`** is the one tool to run. Single file, two scan functions
@@ -41,7 +50,9 @@ yara -r setup-js.yar /path/to/scan      # YARA scan for the dropper/launcher
   It is loaded with `Import-PowerShellDataFile` (pure data, no code execution). The script keeps an
   inline `$IocDefaults` copy as a fallback if the file is missing, and merges any keys absent from
   the loaded file. **When adding/changing an IOC, update `iocs.psd1` AND the matching key in
-  `$IocDefaults` so the two stay in sync.**
+  `$IocDefaults` so the two stay in sync.** Note: `CmdSigs` is consumed only by the `.claude` Bash
+  guard hook (not the scanner) but is mirrored into `$IocDefaults` anyway to keep the two copies
+  identical; the hook has its own fallback copy in `Miasma.Common.ps1` too.
 - **Severity is derived from category**, not set per-finding: categories `DROPPER, INJECT, FORGED,
   BADDEP, WORKFLOW, RUNNER, PAYLOAD, BUN-DROP, PROGRAMDATA` → `INFECTED`; everything else
   (`NPM-AUDIT, SECRETS, SIGNATURE, PERSIST, PROGRAMDATA-CFG`) → `REVIEW`. The regex in `Add-Finding`
@@ -53,6 +64,15 @@ yara -r setup-js.yar /path/to/scan      # YARA scan for the dropper/launcher
   preferred, `git filter-branch` fallback), and leaves the force-push **manual**. It deliberately
   avoids BFG (basename matching would delete legitimate `settings.json`/`setup.js`) and only purges
   *standalone* artifacts — never `package.json`/`Gemfile` (fix their content instead).
+- **`.claude/` hooks** share one helper module (`Miasma.Common.ps1`): `Guard-Write.ps1`
+  (`PreToolUse` Write/Edit, blocks IOC-injecting writes via `exit 2`), `Guard-Bash.ps1`
+  (`PreToolUse` Bash, blocks worm *execution* — `node .github/setup.js`, `bun`, a piped `bun.sh`
+  installer — via `CmdSigs`), `Scan-Write.ps1` (`PostToolUse`, moves infected files to the reversible
+  `.miasma-quarantine/` vault), `Session-Sweep.ps1` (`SessionStart`, repo sweep into context), and
+  the `/miasma-scan` command. Wired in `.claude/settings.json`. They load IOCs from `iocs.psd1` —
+  **never hard-code indicators in a hook.** `CmdSigs` patterns are **anchored to a command position**
+  so triage commands that merely *mention* an IOC (`grep`/`yara`/`cat`) are not blocked — only
+  execution is.
 
 ## Gotchas that bit us (don't regress these)
 
@@ -66,10 +86,17 @@ yara -r setup-js.yar /path/to/scan      # YARA scan for the dropper/launcher
 - **Forged-commit detection requires more than unsigned + `[skip ci]`** (those occur on legitimate
   commits): it also needs an impersonated github-actions bot email OR a worm message like
   `update dependencies`. Keep `BadEmails` to bot addresses only — never a real owner's email.
+- **The hooks must exclude the toolkit's own files** (`Test-MiasmaExcluded`): `iocs.psd1`,
+  `Scan-Miasma.ps1`, `purge-history.sh`, `setup-js.yar`, `content/`, `.claude/hooks|commands` all
+  contain IOC strings on purpose — without the allowlist the hooks quarantine/block themselves.
+  Toolkit dirs are anchored to the repo root (`StartsWith`); only `.git`/`node_modules`/the vault
+  match at any depth — so a *user* sub-folder named `content/` is still scanned.
 
 ## Conventions
 
-- PowerShell 7+ (`pwsh`) required; the script is **read-only** (detects, never modifies/deletes).
+- PowerShell 7+ (`pwsh`) required; `Scan-Miasma.ps1` and the YARA rules are **read-only** (detect,
+  never modify/delete). The **`.claude/` hooks are the one exception**: they *move* infected files
+  to a reversible, git-ignored quarantine vault (never hard-delete) — keep it that way.
 - `$ErrorActionPreference`/`$ProgressPreference` are `SilentlyContinue` by design — failed probes
   must degrade to "no finding," not throw.
 - Reports are kept in English and French (`incident-report.en.md` / `incident-report.fr.md`) —

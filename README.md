@@ -12,6 +12,7 @@ variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitH
 | `iocs.psd1` | Shared indicators (hashes, signatures, bad packages, configs) loaded by the scanner — *edit IOCs here* |
 | `purge-history.sh` | Purge malicious files from **all git history** (filter-repo → filter-branch) + backup |
 | `setup-js.yar` | YARA rules for the dropper + launcher configs |
+| `.claude/` | **Claude Code hooks** — real-time guard/quarantine + `/miasma-scan` command (see below) |
 
 ## Prerequisites
 
@@ -69,6 +70,33 @@ yara -r setup-js.yar /path/to/scan
       echo "::error::Miasma/Shai-Hulud dropper or launcher detected — failing build"; exit 1
     fi
 ```
+
+## Claude Code hooks (`.claude/`)
+
+Real-time protection for machines that run **Claude Code** in this repo. The hooks reuse
+`iocs.psd1` (no duplicated indicators) and are wired in `.claude/settings.json`:
+
+| Hook | Event | Action |
+|---|---|---|
+| `Guard-Write.ps1` | `PreToolUse` (Write/Edit/MultiEdit) | **Blocks** a write that would inject a worm IOC (cancels the tool call) |
+| `Guard-Bash.ps1` | `PreToolUse` (Bash) | **Blocks** worm *execution* — `node .github/setup.js`, `bun`/`bunx`, a piped `bun.sh` installer |
+| `Scan-Write.ps1` | `PostToolUse` (Write/Edit/MultiEdit) | **Alerts + quarantines** an infected file after it lands |
+| `Session-Sweep.ps1` | `SessionStart` | Fast repo sweep; reports any pre-existing infection into context |
+| `/miasma-scan` | command | On-demand wrapper around `Scan-Miasma.ps1` |
+
+- **Quarantine is reversible**: infected files are *moved* to `.miasma-quarantine/<timestamp>/…`
+  (git-ignored) and logged to `.miasma-quarantine/quarantine.log` — restore with `Move-Item`.
+  Nothing is hard-deleted.
+- **Self-exclusion** (`Test-MiasmaExcluded` in `Miasma.Common.ps1`): the toolkit's own files
+  legitimately contain IOC strings (`iocs.psd1`, `Scan-Miasma.ps1`, `purge-history.sh`,
+  `setup-js.yar`, `content/`, `.claude/hooks|commands`) and are never blocked/quarantined.
+- **`Guard-Bash` targets execution, not mention**: its patterns (`iocs.psd1` → `CmdSigs`) are
+  anchored to a command position, so triage commands that merely name an IOC
+  (`grep "node .github/setup.js"`, `yara -r setup-js.yar`, `cat setup.js`) are **not** blocked —
+  only actually running `node …/setup.js` / `bun` / a `bun.sh` install pipe is. Note: `bun`/`bunx`
+  invocation is blocked outright (the worm's runtime); allowlist via `CmdSigs` if you genuinely need Bun.
+- ⚠️ Unlike `Scan-Miasma.ps1` (read-only), these hooks **modify the tree** (quarantine). They are
+  opt-in: Claude Code prompts to approve hooks the first time it loads `.claude/settings.json`.
 
 ## Severity model (Scan-Miasma.ps1)
 
