@@ -67,13 +67,16 @@ function Test-MiasmaExcluded {
     # sub-folder inside a scanned project is NOT wrongly skipped. The CI guard
     # action/workflow reference the dropper path on purpose.
     $skipTopLevel = @('.claude\hooks\', '.claude\commands\', 'content\',
-                      '.github\actions\miasma-guard\', '.github\workflows\')
+                      '.github\actions\miasma-guard\', '.github\workflows\',
+                      '.github\issue_template\')
     foreach ($d in $skipTopLevel) { if ($relL.StartsWith($d)) { return $true } }
 
-    $excludedFiles = @('iocs.psd1', 'scan-miasma.ps1', 'expand-miasmapayload.ps1',
+    $excludedFiles = @('iocs.psd1', 'scan-miasma.ps1', 'scan-miasma.sh',
+                       'expand-miasmapayload.ps1', 'invoke-miasmarotation.ps1',
                        'setup-js.yar', 'purge-history.sh',
                        'readme.md', 'claude.md', 'contributing.md', 'security.md',
-                       'code_of_conduct.md', '.claude\settings.json')
+                       'code_of_conduct.md', '.github\pull_request_template.md',
+                       '.claude\settings.json')
     foreach ($f in $excludedFiles) { if ($relL -eq $f) { return $true } }
 
     return $false

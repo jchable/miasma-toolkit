@@ -1,0 +1,64 @@
+name: "🧬 New variant / IOC"
+description: Report a new Miasma / Shai-Hulud variant or propose new indicators of compromise.
+title: "[IOC] "
+labels: ["ioc", "detection"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thanks for improving coverage! Indicators live in `iocs.psd1` (the single
+        source of truth). If you can, open a PR against it directly — otherwise
+        describe the indicators here and a maintainer will add them.
+        **Do not paste live payload code**; link or hash it instead.
+  - type: input
+    id: variant
+    attributes:
+      label: Variant / wave
+      description: Name or short description of the variant, and when you first saw it.
+      placeholder: "e.g. Miasma wave using ROT-9 + Bun v1.3.x, observed 2026-06"
+    validations:
+      required: true
+  - type: dropdown
+    id: ioc_type
+    attributes:
+      label: Indicator type(s)
+      multiple: true
+      options:
+        - Payload SHA-256 (PayloadShas)
+        - Content/loader signature (ContentSigs)
+        - Injected-workflow / launcher regex (WfSig)
+        - Bad npm package (BadNpm)
+        - Launcher config path (ConfigFiles)
+        - Command-execution signature (CmdSigs)
+        - ProgramData config / path (CVE-2026-35603)
+        - Forged-commit signal (BadEmails / message)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: indicators
+    attributes:
+      label: Indicators
+      description: >
+        The concrete values. For hashes, give SHA-256. For signatures/regex, give
+        the exact string. For packages, give name@version. Reference the dropper
+        rather than pasting its full content.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence / source
+      description: Where you saw it (repo, advisory, sample hash, write-up link). Redact anything sensitive.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have not pasted executable payload code in this issue.
+          required: true
+        - label: These indicators come from a system/account I was authorized to inspect.
+          required: true

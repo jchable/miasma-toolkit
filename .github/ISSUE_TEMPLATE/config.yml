@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability (privately)
+    url: https://github.com/jchable/miasma-toolkit/security/advisories/new
+    about: >-
+      Found a detection bypass, a false negative, or an unsafe behavior in the
+      toolkit itself? Report it privately via a GitHub security advisory — do not
+      open a public issue. See SECURITY.md.
+  - name: 💬 Questions & discussion
+    url: https://github.com/jchable/miasma-toolkit/discussions
+    about: General questions, triage help, or ideas that aren't a bug or a new IOC.
