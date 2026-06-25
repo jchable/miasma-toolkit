@@ -43,7 +43,12 @@ function Get-MiasmaIoc {
 function Test-MiasmaExcluded {
     param([Parameter(Mandatory)][string]$Path)
 
-    $root = (Get-MiasmaProjectDir).TrimEnd('\','/')
+    # Normalize BOTH sides to backslashes before comparing — CLAUDE_PROJECT_DIR
+    # is often passed with forward slashes (the hook command template uses
+    # "$CLAUDE_PROJECT_DIR/.claude/..."), and a slash mismatch would make the
+    # StartsWith below fail, leaving $rel as the full path and silently breaking
+    # every filename/dir exclusion (the toolkit would quarantine its own files).
+    $root = (Get-MiasmaProjectDir).Replace('/', '\').TrimEnd('\')
     try { $full = [System.IO.Path]::GetFullPath($Path) } catch { $full = $Path }
     $full = $full.Replace('/', '\')
 
@@ -59,12 +64,16 @@ function Test-MiasmaExcluded {
     foreach ($d in $skipAnywhere) { if ($relL.StartsWith($d) -or $relL -like "*\$d*") { return $true } }
 
     # Toolkit's own dirs — anchored to the repo root only, so a same-named
-    # sub-folder inside a scanned project is NOT wrongly skipped.
-    $skipTopLevel = @('.claude\hooks\', '.claude\commands\', 'content\')
+    # sub-folder inside a scanned project is NOT wrongly skipped. The CI guard
+    # action/workflow reference the dropper path on purpose.
+    $skipTopLevel = @('.claude\hooks\', '.claude\commands\', 'content\',
+                      '.github\actions\miasma-guard\', '.github\workflows\')
     foreach ($d in $skipTopLevel) { if ($relL.StartsWith($d)) { return $true } }
 
-    $excludedFiles = @('iocs.psd1', 'scan-miasma.ps1', 'setup-js.yar', 'purge-history.sh',
-                       'readme.md', 'claude.md', '.claude\settings.json')
+    $excludedFiles = @('iocs.psd1', 'scan-miasma.ps1', 'expand-miasmapayload.ps1',
+                       'setup-js.yar', 'purge-history.sh',
+                       'readme.md', 'claude.md', 'contributing.md', 'security.md',
+                       'code_of_conduct.md', '.claude\settings.json')
     foreach ($f in $excludedFiles) { if ($relL -eq $f) { return $true } }
 
     return $false
