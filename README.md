@@ -1,5 +1,9 @@
 # Miasma / Shai-Hulud toolkit
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-5391FE.svg?logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/)
+[![Miasma CI guard](https://github.com/jchable/miasma-toolkit/actions/workflows/miasma-ci.yml/badge.svg)](https://github.com/jchable/miasma-toolkit/actions/workflows/miasma-ci.yml)
+
 Incident analysis + detection/remediation tooling for the **Miasma** worm (a *Mini Shai-Hulud*
 variant) that injects auto-run payloads into AI-agent / IDE configs and npm/GitHub repos.
 
